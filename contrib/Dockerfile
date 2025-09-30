@@ -32,7 +32,6 @@ ARG DOCA_PREFIX="/opt/mellanox/doca"
 ARG NIXL_PREFIX="/usr/local/nixl"
 ARG NIXL_PLUGIN_DIR="$NIXL_PREFIX/lib/$ARCH-linux-gnu/plugins"
 ARG NPROC
-ARG WHL_DEFAULT_PYTHON_VERSIONS="3.12"
 ARG LIBFABRIC_VERSION="v1.21.0"
 ARG LIBFABRIC_INSTALL_PATH="/usr/local"
 ARG BUILD_TYPE="release"
@@ -62,11 +61,13 @@ RUN apt-get update -y && \
     flex \
     libgtest-dev \
     build-essential \
-    python3.12-dev \
     clang \
     hwloc \
     libhwloc-dev \
     libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev # aws-sdk-cpp dependencies
+
+# Extra dependencies needed for Ubuntu 22
+RUN apt-get install -y wget git
 
 # Add DOCA repository and install packages
 RUN ARCH_SUFFIX=$(if [ "${ARCH}" = "aarch64" ]; then echo "arm64"; else echo "amd64"; fi) && \
@@ -182,6 +183,15 @@ RUN wget --tries=3 --waitretry=5 --timeout=30 --read-timeout=60 \
     make install && \
     ldconfig
 
+
+# Build Python from source
+RUN wget https://www.python.org/ftp/python/${DEFAULT_PYTHON_VERSION}.0/Python-${DEFAULT_PYTHON_VERSION}.0.tgz -q -O - | tar xzf - && \
+    cd Python-* && \
+    ./configure --enable-shared --prefix=/usr/local && \
+    make -j${NPROC:-$(nproc)} && \
+    make install && \
+    ldconfig
+
 # By default, uv downloads python packages to $HOME/.cache/uv and hard links them
 # from the virtual environment. This means that the files reside in /root/.cache/uv,
 # which is not what we want since some systems mount user home dir into /root,
@@ -196,11 +206,11 @@ ENV UV_NO_BUILD_ISOLATION=1
 ENV UV_NO_SYNC=1
 # Create a new virtual environment
 ENV VIRTUAL_ENV=/workspace/.venv
-RUN rm -rf $VIRTUAL_ENV && uv venv $VIRTUAL_ENV --python $DEFAULT_PYTHON_VERSION
+RUN rm -rf $VIRTUAL_ENV && uv venv $VIRTUAL_ENV --python /usr/local/bin/python${DEFAULT_PYTHON_VERSION}
 # Activate the virtual environment
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Install python dependencies
-RUN uv pip install --upgrade meson meson-python pybind11 patchelf pyYAML click tabulate auditwheel tomlkit
+RUN uv pip install --upgrade meson meson-python pybind11 patchelf pyYAML click tabulate auditwheel tomlkit setuptools
 # Install PyTorch
 RUN export UV_INDEX="https://download.pytorch.org/whl/cu$(echo $CUDA_VERSION | cut -d. -f1,2 | tr -d .)" && \
     uv pip install torch torchvision torchaudio
@@ -212,8 +222,8 @@ COPY . /workspace/nixl
 
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LIBFABRIC_INSTALL_PATH/lib:$RDMA_CORE_PREFIX/lib:$LD_LIBRARY_PATH
 
-# Install pybind11 via apt
-RUN apt-get update && apt-get install -y --no-install-recommends pybind11-dev
+# Install pkg-config
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config
 
 # Set PKG_CONFIG_PATH for NIXL EP dependencies (rdma-core, UCX, DOCA)
 ENV PKG_CONFIG_PATH=$RDMA_CORE_PREFIX/lib/$ARCH-linux-gnu/pkgconfig:$UCX_PREFIX/lib/pkgconfig:$DOCA_PREFIX/lib/$ARCH-linux-gnu/pkgconfig:$PKG_CONFIG_PATH

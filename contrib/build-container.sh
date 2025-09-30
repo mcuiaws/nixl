@@ -159,7 +159,7 @@ get_options() {
     WHL_PLATFORM=${WHL_BASE}_${ARCH}
 
     if [ -z "$TAG" ]; then
-        TAG="--tag nixl:${VERSION}"
+        TAG="--tag nixl:${VERSION}-py${WHL_PYTHON_VERSIONS}-${OS}"
     fi
 }
 
@@ -216,7 +216,7 @@ if [ -d "$NIXL_DIR/build" ]; then
 fi
 
 BUILD_ARGS+=" --build-arg BASE_IMAGE=$BASE_IMAGE --build-arg BASE_IMAGE_TAG=$BASE_IMAGE_TAG"
-BUILD_ARGS+=" --build-arg WHL_PYTHON_VERSIONS=$WHL_PYTHON_VERSIONS"
+BUILD_ARGS+=" --build-arg DEFAULT_PYTHON_VERSION=$WHL_PYTHON_VERSIONS"
 BUILD_ARGS+=" --build-arg WHL_PLATFORM=$WHL_PLATFORM"
 BUILD_ARGS+=" --build-arg ARCH=$ARCH"
 BUILD_ARGS+=" --build-arg UCX_REF=$UCX_REF"
