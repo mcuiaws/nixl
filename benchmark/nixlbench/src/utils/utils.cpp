@@ -33,6 +33,7 @@
 #include <filesystem>
 
 #include "runtime/etcd/etcd_rt.h"
+#include "utils/neuron.h"
 #include "utils/utils.h"
 
 /**********
@@ -681,8 +682,19 @@ void xferBenchUtils::checkConsistency(std::vector<std::vector<xferBenchIOV>> &io
                             exit(EXIT_FAILURE);
                         }
                         is_allocated = true;
-                        CHECK_CUDA_ERROR(cudaMemcpy(addr, (void *)iov.addr, len,
-                                                    cudaMemcpyDeviceToHost), "cudaMemcpy failed");
+
+                        // Assume no CUDA cores exist if Neuron cores are found.
+                        // There are no AWS instance types with both NVIDIA GPUs and Neuron
+                        // accelerators.
+                        if (neuronCoreCount() > 0) {
+                            CHECK_NEURON_ERROR(
+                                neuronMemcpy(addr, (void *)iov.addr, len, neuronMemcpyDeviceToHost),
+                                "nrt_tensor_read failed");
+                        } else {
+                            CHECK_CUDA_ERROR(
+                                cudaMemcpy(addr, (void *)iov.addr, len, cudaMemcpyDeviceToHost),
+                                "cudaMemcpy failed");
+                        }
 #else
                         std::cerr << "Failure in consistency check: VRAM segment type not supported without CUDA"
                                   << std::endl;
@@ -768,8 +780,19 @@ void xferBenchUtils::checkConsistency(std::vector<std::vector<xferBenchIOV>> &io
 #if HAVE_CUDA
                     addr = calloc(1, len);
                     is_allocated = true;
-                    CHECK_CUDA_ERROR(cudaMemcpy(addr, (void *)iov.addr, len,
-                                                cudaMemcpyDeviceToHost), "cudaMemcpy failed");
+
+                    // Assume no CUDA cores exist if Neuron cores are found.
+                    // There are no AWS instance types with both NVIDIA GPUs and Neuron
+                    // accelerators.
+                    if (neuronCoreCount() > 0) {
+                        CHECK_NEURON_ERROR(
+                            neuronMemcpy(addr, (void *)iov.addr, len, neuronMemcpyDeviceToHost),
+                            "nrt_tensor_read failed");
+                    } else {
+                        CHECK_CUDA_ERROR(
+                            cudaMemcpy(addr, (void *)iov.addr, len, cudaMemcpyDeviceToHost),
+                            "cudaMemcpy failed");
+                    }
 #else
                     std::cerr << "Failure in consistency check: VRAM segment type not supported without CUDA"
                               << std::endl;
